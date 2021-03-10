@@ -96,9 +96,23 @@ def contributors(token, org, repo, json, csv):
 
     if not repo:
         repo_given = False
+        print(repo_given)
+        repo = []
+        has_next = True
         cursor = ""
-        result = graphql_query(gen_repo_query(org,cursor),token)
-        repo = result["data"]["organization"]["repositories"]["nodes"]
+        while has_next:
+            try:
+                result = graphql_query(gen_repo_query(org,cursor),token)
+            except Exception as e:
+                print(e)
+                return
+            
+            repo_results = result["data"]["organization"]["repositories"]["nodes"]
+            has_next = result["data"]["organization"]["repositories"]["pageInfo"]["hasNextPage"]
+            cursor = result["data"]["organization"]["repositories"]["pageInfo"]["endCursor"]
+
+            for i in repo_results:
+                repo.append(i["name"])
 
     for one_repo in repo:
         has_next = True
@@ -107,7 +121,7 @@ def contributors(token, org, repo, json, csv):
             if repo_given: 
                 query = gen_query(org, one_repo, cursor)
             else:
-                query = gen_query(org, one_repo["name"] , cursor)
+                query = gen_query(org, one_repo , cursor)
 
             try:
                 result = graphql_query(query, token) # Execute the query
@@ -126,12 +140,12 @@ def contributors(token, org, repo, json, csv):
                             "date": node["mergedAt"],
                             "user": node["author"]["login"],
                             "pr": node["number"],
-                            "repo": one_repo["name"],
+                            "repo": one_repo,
                         })
                     elif csv:
-                        writer.writerow([node["number"], node["mergedAt"], node["author"]["login"],one_repo["name"]])
+                        writer.writerow([node["number"], node["mergedAt"], node["author"]["login"],one_repo])
                     else:
-                        print("PR {} (Merged: {}): {}".format(node["number"], node["mergedAt"], node["author"]["login"], one_repo["name"]))
+                        print("PR {} (Merged: {}): {}".format(node["number"], node["mergedAt"], node["author"]["login"], one_repo))
 
     if json:
         print(jsonlib.dumps(data))
