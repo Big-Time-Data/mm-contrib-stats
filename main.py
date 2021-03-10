@@ -92,11 +92,10 @@ def contributors(token, org, repo, json, csv):
 
     writer = csvlib.writer(sys.stdout)
     if csv:
-        writer.writerow(["PR", "Merged At", "Author", "Repo"])
+        writer.writerow(["PR_Number", "Merged_At", "Author", "Repo"])
 
     if not repo:
         repo_given = False
-        print(repo_given)
         repo = []
         has_next = True
         cursor = ""
