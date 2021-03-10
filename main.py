@@ -54,6 +54,23 @@ def gen_staff_query(org, cursor = ""):
       }
     }
     """).render(org=org, cursor=cursor)
+    
+def gen_repo_query(org, cursor = ""):
+    return Template("""
+    {
+      organization(login: "{{org}}") {
+        repositories(first: 100 {%if cursor %}, after: "{{cursor}}"{% endif %}) {
+          pageInfo {
+            endCursor
+            hasNextPage
+          }
+          nodes {
+            name
+          }
+        }
+      }
+    }
+    """).render(cursor=cursor, org=org)
 
 @click.group()
 def cli():
@@ -62,9 +79,10 @@ def cli():
 @cli.command()
 @click.option('--token', '-t', prompt='Your Github access token', help='The token used to authenticate the user against Github.')
 @click.option('--org', '-o', prompt='Organization', help='The organization containing the repo. E.g. mattermost')
-@click.option('--repo', '-r', prompt='Repository', help='The repository which contains the issues. E.g. mattermost-server', multiple=True)
+@click.option('--repo', '-r', help='The repository which contains the issues. E.g. mattermost-server', multiple=True, default = None, required=False)
 @click.option('--json', '-j', help='The output is going to be a JSON', is_flag=True)
 @click.option('--csv', '-c', help='The output is going to be a CSV', is_flag=True)
+
 def contributors(token, org, repo, json, csv):
     data = []
 
@@ -76,11 +94,21 @@ def contributors(token, org, repo, json, csv):
     if csv:
         writer.writerow(["PR", "Merged At", "Author", "Repo"])
 
+    if not repo:
+        repo_given = False
+        cursor = ""
+        result = graphql_query(gen_repo_query(org,cursor),token)
+        repo = result["data"]["organization"]["repositories"]["nodes"]
+
     for one_repo in repo:
         has_next = True
         cursor = ""
         while has_next:
-            query = gen_query(org, one_repo, cursor)
+            if repo_given: 
+                query = gen_query(org, one_repo, cursor)
+            else:
+                query = gen_query(org, one_repo["name"] , cursor)
+
             try:
                 result = graphql_query(query, token) # Execute the query
             except Exception as e:
@@ -98,12 +126,12 @@ def contributors(token, org, repo, json, csv):
                             "date": node["mergedAt"],
                             "user": node["author"]["login"],
                             "pr": node["number"],
-                            "repo": one_repo,
+                            "repo": one_repo["name"],
                         })
                     elif csv:
-                        writer.writerow([node["number"], node["mergedAt"], node["author"]["login"]], one_repo)
+                        writer.writerow([node["number"], node["mergedAt"], node["author"]["login"],one_repo["name"]])
                     else:
-                        print("PR {} (Merged: {}): {}".format(node["number"], node["mergedAt"], node["author"]["login"], one_repo))
+                        print("PR {} (Merged: {}): {}".format(node["number"], node["mergedAt"], node["author"]["login"], one_repo["name"]))
 
     if json:
         print(jsonlib.dumps(data))
@@ -115,6 +143,7 @@ def contributors(token, org, repo, json, csv):
 @click.option('--csv', '-c', help='The output is going to be a CSV', is_flag=True)
 @click.option('--exclude', help='Exclude a user by username', multiple=True)
 @click.option('--include', help='Include a user by username', multiple=True)
+
 def staff(token, org, json, csv, exclude, include):
     data = []
 
